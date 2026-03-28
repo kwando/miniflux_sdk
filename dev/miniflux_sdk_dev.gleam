@@ -4,6 +4,7 @@ import gleam/httpc
 import gleam/result
 import gleam/string
 import miniflux_sdk
+import miniflux_sdk/get_categories
 import simplifile
 import snag
 
@@ -11,13 +12,13 @@ pub fn get_entries_test() {
   let client = create_client()
 
   let assert Ok(_resp) =
-    miniflux_sdk.get_categories(client)
+    get_categories.request(client)
     |> echo
     |> httpc.send
     |> echo
     |> result.map(dump_to_file(_, "get_categories.json"))
     |> snag.map_error(string.inspect)
-    |> result.try(snagify(miniflux_sdk.get_categories_response_decoder))
+    |> result.try(snagify(get_categories.decoder))
     |> echo
 }
 
@@ -27,7 +28,7 @@ fn create_client() {
   let assert Ok(api_key) = envoy.get("MINIFLUX_API_KEY")
     as "missing MINIFLUX_API_KEY"
 
-  let assert Ok(client) = miniflux_sdk.from_url(base_url, api_key)
+  let assert Ok(client) = miniflux_sdk.client_from_url(base_url, api_key)
   client
 }
 

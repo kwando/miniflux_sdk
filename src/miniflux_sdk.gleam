@@ -1,20 +1,30 @@
-import gleam/bool
+//// This library contains functions for talking to the miniflux API. So far only a tiny subset of the API
+//// is available.
+////
+//// You will need an API-key for your instance in order to use this library.
+////
+//// See [https://miniflux.app](https://miniflux.app)
+
 import gleam/dynamic/decode
-import gleam/function
 import gleam/http
 import gleam/http/request
 import gleam/http/response.{type Response}
-import gleam/int
 import gleam/json
-import gleam/list
-import gleam/option.{type Option, None, Some}
+import gleam/option.{None, Some}
 import gleam/result
 import gleam/uri
+import redact/secret.{type Secret}
 
+/// Represents a category in Miniflux.
+///
+/// Categories are used to organize feeds into groups.
 pub type Category {
   Category(id: Int, user_id: Int, title: String)
 }
 
+/// Represents an entry (article) in Miniflux.
+///
+/// An entry is a single article or item from a feed.
 pub type Entry {
   Entry(
     id: Int,
@@ -29,46 +39,44 @@ pub type Entry {
   )
 }
 
-pub type EntryStatus {
-  Read
-  Unread
-  Removed
-}
-
-pub type EntryFilter {
-  EntryFilter(
-    status: List(EntryStatus),
-    limit: Option(Int),
-    offset: Option(Int),
-    starred: Option(Bool),
-    search: Option(String),
-    category: Option(Int),
+/// Creates a new Miniflux client from a base URL and API key.
+///
+/// The base URL should be the full URL of your Miniflux instance,
+/// including the scheme (http or https) and any path prefix.
+///
+/// ## Examples
+///
+/// ```gleam
+/// let client = miniflux_sdk.client_from_url("https://miniflux.example.com", "your-api-key")
+/// ```
+///
+/// ## Errors
+///
+/// Returns `CannotParseUrl` if the URL cannot be parsed.
+/// Returns `InvalidScheme` if the URL scheme is not http or https.
+pub fn client_from_url(base_url, api_key: String) {
+  use url <- result.try(
+    uri.parse(base_url)
+    |> result.replace_error(CannotParseUrl),
   )
-}
-
-fn entry_filter_to_list(filter: EntryFilter) {
-  list.map(filter.status, fn(status) {
-    #("status", case status {
-      Read -> "read"
-      Unread -> "unread"
-      Removed -> "removed"
-    })
+  use scheme <- result.try(case url.scheme {
+    Some("https") -> Ok(http.Https)
+    Some("http") -> Ok(http.Http)
+    None -> Ok(http.Http)
+    Some(_) -> Error(InvalidScheme)
   })
-  |> append_if("limit", filter.limit, int.to_string)
-  |> append_if("offset", filter.offset, int.to_string)
-  |> append_if("starred", filter.starred, bool.to_string)
-  |> append_if("search", filter.search, function.identity)
-  |> append_if("category_id", filter.category, int.to_string)
-  |> list.reverse
+
+  Client(
+    base_path: url.path,
+    host: url.host |> option.unwrap("localhost"),
+    scheme:,
+    port: url.port,
+    api_key: secret.new(api_key),
+  )
+  |> Ok
 }
 
-fn append_if(list, key, option: Option(opt), mapper: fn(opt) -> String) {
-  case option {
-    Some(value) -> [#(key, mapper(value)), ..list]
-    None -> list
-  }
-}
-
+/// Returns a decoder for parsing JSON entries from the Miniflux API.
 pub fn entry_decoder() -> decode.Decoder(Entry) {
   use id <- decode.field("id", decode.int)
   use user_id <- decode.field("user_id", decode.int)
@@ -92,26 +100,13 @@ pub fn entry_decoder() -> decode.Decoder(Entry) {
   ))
 }
 
-pub fn get_entries_response_decoder(response: Response(String)) {
-  use <- expect_http_status(response, 200)
-
-  json.parse(
-    response.body,
-    decode.at(["entries"], decode.list(entry_decoder())),
-  )
-  |> result.map_error(CannotDecodeJson)
-}
-
-pub opaque type Client {
-  Client(
-    base_path: String,
-    host: String,
-    scheme: http.Scheme,
-    port: Option(Int),
-    api_key: String,
-  )
-}
-
+/// Error types that can occur when using the Miniflux SDK.
+///
+/// - `CannotParseUrl`: The provided URL could not be parsed.
+/// - `CannotDecodeJson`: The JSON response could not be decoded.
+/// - `InvalidScheme`: The URL scheme is not http or https.
+/// - `Unauthorized`: The API key is invalid (HTTP 401).
+/// - `UnexpectedHttpStatus`: An unexpected HTTP status was received.
 pub type Error {
   CannotParseUrl
   CannotDecodeJson(json.DecodeError)
@@ -120,35 +115,17 @@ pub type Error {
   UnexpectedHttpStatus(response: Response(String))
 }
 
-pub fn from_url(base_url, api_key: String) {
-  use url <- result.try(
-    uri.parse(base_url)
-    |> result.replace_error(CannotParseUrl),
-  )
-  use scheme <- result.try(case url.scheme {
-    Some("https") -> Ok(http.Https)
-    Some("http") -> Ok(http.Http)
-    None -> Ok(http.Http)
-    Some(_) -> Error(InvalidScheme)
-  })
-
-  Client(
-    base_path: url.path,
-    host: url.host |> option.unwrap("localhost"),
-    scheme:,
-    port: url.port,
-    api_key:,
-  )
-  |> Ok
-}
-
-fn category_decoder() -> decode.Decoder(Category) {
+/// Returns a decoder for parsing JSON categories from the Miniflux API.
+pub fn category_decoder() -> decode.Decoder(Category) {
   use id <- decode.field("id", decode.int)
   use user_id <- decode.field("user_id", decode.int)
   use title <- decode.field("title", decode.string)
   decode.success(Category(id:, user_id:, title:))
 }
 
+/// Represents a feed in Miniflux.
+///
+/// A feed is a source of entries, such as an RSS or Atom feed.
 pub type Feed {
   Feed(
     id: Int,
@@ -161,7 +138,8 @@ pub type Feed {
   )
 }
 
-fn feed_decoder() -> decode.Decoder(Feed) {
+/// Returns a decoder for parsing JSON feeds from the Miniflux API.
+pub fn feed_decoder() -> decode.Decoder(Feed) {
   use id <- decode.field("id", decode.int)
   use user_id <- decode.field("user_id", decode.int)
   use title <- decode.field("title", decode.string)
@@ -180,16 +158,8 @@ fn feed_decoder() -> decode.Decoder(Feed) {
   ))
 }
 
-pub fn get_feeds_response_decoder(
-  response: Response(String),
-) -> Result(List(Feed), Error) {
-  use <- expect_http_status(response, 200)
-  response.body
-  |> json.parse(decode.list(feed_decoder()))
-  |> result.map_error(CannotDecodeJson)
-}
-
-fn expect_http_status(response: Response(String), status, continue) {
+@internal
+pub fn expect_http_status(response: Response(String), status, continue) {
   case response.status {
     actual_status if actual_status == status -> continue()
     401 -> Error(Unauthorized(response))
@@ -197,41 +167,60 @@ fn expect_http_status(response: Response(String), status, continue) {
   }
 }
 
-pub fn get_feeds_request(client: Client) {
-  http_get(client, "/v1/feeds", [])
+@internal
+pub fn decode_json(
+  response: Response(String),
+  decoder: decode.Decoder(a),
+) -> Result(a, Error) {
+  json.parse(response.body, decoder)
+  |> result.map_error(CannotDecodeJson)
 }
 
-pub fn get_entries_request(client: Client, filter: EntryFilter) {
-  http_get(client, "/v1/entries", entry_filter_to_list(filter))
+/// The Miniflux client used to make API requests.
+///
+/// This is an opaque type - you create it using `client_from_url`
+/// and pass it to the various API functions.
+pub opaque type Client {
+  Client(
+    base_path: String,
+    host: String,
+    scheme: http.Scheme,
+    port: option.Option(Int),
+    api_key: Secret(String),
+  )
 }
 
-fn http_get(client: Client, path: String, query: List(#(String, String))) {
+@internal
+pub fn http_get(client: Client, path: String, query: List(#(String, String))) {
+  http_request(client, http.Get, path, query, "")
+}
+
+@internal
+pub fn http_put(client: Client, path: String, body: String) {
+  http_request(client, http.Put, path, [], body)
+}
+
+fn http_request(
+  client: Client,
+  method: http.Method,
+  path: String,
+  query: List(#(String, String)),
+  body: a,
+) -> request.Request(a) {
   request.Request(
-    method: http.Get,
+    method:,
     headers: [
       #("accept", "application/json"),
-      #("x-auth-token", client.api_key),
+      #("x-auth-token", secret.expose(client.api_key)),
     ],
-    body: "",
+    body:,
     scheme: client.scheme,
     host: client.host,
     port: client.port,
     path: client.base_path <> path,
     query: case query {
-      [] -> None
-      list -> Some(uri.query_to_string(list))
+      [] -> option.None
+      list -> option.Some(uri.query_to_string(list))
     },
   )
-}
-
-pub fn get_categories(client: Client) -> request.Request(String) {
-  http_get(client, "/v1/categories", [])
-}
-
-pub fn get_categories_response_decoder(
-  response: Response(String),
-) -> Result(List(Category), Error) {
-  use <- expect_http_status(response, 200)
-  json.parse(response.body, decode.list(category_decoder()))
-  |> result.map_error(CannotDecodeJson)
 }
