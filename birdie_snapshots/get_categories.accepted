@@ -1,0 +1,10 @@
+---
+version: 1.5.4
+title: get_categories
+file: ./test/miniflux_sdk_test.gleam
+test_name: get_categories_response_decoder_test
+---
+[
+  Category(1, 1, "All"),
+  Category(2, 1, "Tech"),
+]

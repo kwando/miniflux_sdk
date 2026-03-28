@@ -1,0 +1,4 @@
+[
+  { "id": 1, "title": "All", "user_id": 1, "hide_globally": false },
+  { "id": 2, "title": "Tech", "user_id": 1, "hide_globally": false }
+]

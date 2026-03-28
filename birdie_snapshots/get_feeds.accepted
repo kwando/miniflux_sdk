@@ -1,0 +1,71 @@
+---
+version: 1.5.4
+title: get_feeds
+file: ./test/miniflux_sdk_test.gleam
+test_name: get_feeds_response_decoder_test
+---
+[
+  Feed(
+    7,
+    1,
+    "Ferd.ca",
+    "https://ferd.ca/",
+    "https://ferd.ca/feed.rss",
+    False,
+    Category(1, 1, "All"),
+  ),
+  Feed(
+    6,
+    1,
+    "Fly.io Status - Incident History",
+    "https://status.flyio.net",
+    "https://status.flyio.net/history.atom",
+    False,
+    Category(2, 1, "Tech"),
+  ),
+  Feed(
+    3,
+    1,
+    "Gleam",
+    "https://gleam.run",
+    "https://gleam.run/feed.xml",
+    False,
+    Category(2, 1, "Tech"),
+  ),
+  Feed(
+    4,
+    1,
+    "Lagunens Kappseglingsklubb – LKK",
+    "https://kappseglingsklubben.lagunen.nu",
+    "https://kappseglingsklubben.lagunen.nu/feed/",
+    False,
+    Category(1, 1, "All"),
+  ),
+  Feed(
+    5,
+    1,
+    "Terts Diepraam - Blog",
+    "https://terts.dev/blog/",
+    "https://terts.dev/blog/atom.xml",
+    False,
+    Category(1, 1, "All"),
+  ),
+  Feed(
+    1,
+    1,
+    "The Fly Blog",
+    "https://fly.io/blog/",
+    "https://fly.io/blog/feed.xml",
+    False,
+    Category(2, 1, "Tech"),
+  ),
+  Feed(
+    2,
+    1,
+    "The Phoenix Files",
+    "https://fly.io/phoenix-files/",
+    "https://fly.io/phoenix-files/feed.xml",
+    False,
+    Category(2, 1, "Tech"),
+  ),
+]
